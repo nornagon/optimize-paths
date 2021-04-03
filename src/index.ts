@@ -8,15 +8,14 @@ function dropWhile<T>(a: T[], f: (t: T) => boolean): T[] {
  * Joins adjacent pairs of pointLists where the first ends within tolerance of where the second begins.
  *
  * e.g. with tolerance >= 0.1,
- * {{{ Seq(Seq(Vec2(0, 0), Vec2(10, 0)), Seq(Vec2(10.1, 0), Vec2(20, 0)) }}}
- * becomes
- * {{{ Seq(Seq(Vec2(0, 0), Vec2(20, 0))) }}}
+ * `[[{x: 0, y: 0}, {x: 10, y: 0}], [{x: 10.1, y: 0}, {x: 20, y: 0}]]` becomes
+ * `[[{x: 0, y: 0}, {x: 10, y: 0}, {x: 20, y: 0}]]`.
  *
  * @param pointLists List of paths to join
  * @param tolerance When the endpoints of adjacent paths are closer than this, they will be joined into one path.
  * @return The optimized path list.
  */
-export function joinNearby(pointLists: Vec2[][], tolerance: number = 0.5): Vec2[][] {
+export function merge(pointLists: Vec2[][], tolerance: number = 0.5): Vec2[][] {
   const tol2 = tolerance * tolerance;
   function maybeJoin(a: Vec2[], b: Vec2[]): Vec2[][] {
     if (vlen2(vsub(a[a.length - 1], b[0])) <= tol2) {
@@ -51,12 +50,12 @@ function pathLength(pointList: Vec2[]): number {
  * @param minimumPathLength Paths whose length is less than this value will be filtered out.
  * @returns A new point list, with short paths excluded.
  */
-export function elideShortPaths(pointLists: Vec2[][], minimumPathLength: number): Vec2[][] {
+export function elideShorterThan(pointLists: Vec2[][], minimumPathLength: number): Vec2[][] {
   return pointLists.filter((pl) => pathLength(pl) >= minimumPathLength);
 }
 
 /** Reorder paths greedily, attempting to minimize the amount of pen-up travel time. */
-export function optimize(pointLists: Vec2[][]): Vec2[][] {
+export function reorder(pointLists: Vec2[][]): Vec2[][] {
   if (pointLists.length === 0) { return pointLists; }
   function dist2Between(i: number, j: number): number {
     if (i === j) { return 0; }
