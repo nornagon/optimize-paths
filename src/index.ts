@@ -1,4 +1,6 @@
-import {Vec2, vlen, vlen2, vsub} from "./vec";
+import { Vec2, vlen, vsub } from "./vec";
+import { knn } from "./knn";
+import RBush from "rbush";
 
 function dropWhile<T>(a: T[], f: (t: T) => boolean): T[] {
   return a.slice(a.findIndex((x) => !f(x)));
@@ -16,20 +18,34 @@ function dropWhile<T>(a: T[], f: (t: T) => boolean): T[] {
  * @return The optimized path list.
  */
 export function merge(pointLists: Vec2[][], tolerance: number = 0.5): Vec2[][] {
+  if (pointLists.length === 0) return [];
   const tol2 = tolerance * tolerance;
-  function maybeJoin(a: Vec2[], b: Vec2[]): Vec2[][] {
-    if (vlen2(vsub(a[a.length - 1], b[0])) <= tol2) {
-      return [a.concat(dropWhile(b, (v) => vlen2(vsub(a[a.length - 1], v)) <= tol2))];
+  const pl = pointLists.slice()
+  const result = [pl.shift()!]
+  while (pl.length) {
+    const l = result[result.length - 1]
+    const n = pl.shift()!
+    const lp = l[l.length - 1]
+    const np = n[0]
+    // inline d = vlen2(vsub(lp, np))
+    const dx = lp.x - np.x
+    const dy = lp.y - np.y
+    const d = dx * dx + dy * dy
+    if (d <= tol2) {
+      result[result.length - 1] = result[result.length - 1].concat(
+        dropWhile(n, (v) => {
+          // inline d = vlen2(vsub(lp, v))
+          const dx = lp.x - v.x
+          const dy = lp.y - v.y
+          const d = dx * dx + dy * dy
+          return d <= tol2
+        })
+      )
     } else {
-      return [a, b];
+      result.push(n)
     }
   }
-  function appendAndJoin(a: Vec2[][], b: Vec2[]): Vec2[][] {
-    return a.length === 0
-      ? [b]
-      : a.slice(0, -1).concat(maybeJoin(a[a.length - 1], b));
-  }
-  return pointLists.reduce(appendAndJoin, []);
+  return result
 }
 
 function pathLength(pointList: Vec2[]): number {
@@ -54,48 +70,44 @@ export function elideShorterThan(pointLists: Vec2[][], minimumPathLength: number
   return pointLists.filter((pl) => pathLength(pl) >= minimumPathLength);
 }
 
+function* range(lo: number, hi: number) {
+  for (let i = lo; i < hi; i++) yield i
+}
+
 /** Reorder paths greedily, attempting to minimize the amount of pen-up travel time. */
 export function reorder(pointLists: Vec2[][]): Vec2[][] {
   if (pointLists.length === 0) { return pointLists; }
-  function dist2Between(i: number, j: number): number {
-    if (i === j) { return 0; }
-    const a = pointLists[(i / 2) | 0];
-    const b = pointLists[(j / 2) | 0];
-    const pa = i % 2 === 0 ? a[a.length - 1] : a[0];
-    const pb = j % 2 === 0 ? b[0] : b[b.length - 1];
-    const dx = pa.x - pb.x;
-    const dy = pa.y - pb.y;
-    return dx * dx + dy * dy;
+
+  const pt = (i: number): Vec2 =>
+    i % 2 === 0
+    ? pointLists[(i / 2)|0][0]
+    : pointLists[(i / 2)|0][pointLists[(i / 2)|0].length - 1]
+
+  class PointRBush extends RBush<number> {
+    toBBox(i: number) { const {x, y} = pt(i); return {minX: x, minY: y, maxX: x, maxY: y}; }
+    compareMinX(a: number, b: number) { return pt(a).x - pt(b).x; }
+    compareMinY(a: number, b: number) { return pt(a).y - pt(b).y; }
   }
 
-  const unvisited = new Set<number>();
-  for (let i = 0; i < pointLists.length; i++) { unvisited.add(i); }
-  const sortedPointLists: Vec2[][] = [];
-  let firstIdx = 0;
-  unvisited.delete(firstIdx);
-  sortedPointLists.push(pointLists[firstIdx]);
-  while (unvisited.size > 0) {
-    let nextIdx = -1;
-    let minD = Infinity;
-    for (const i of unvisited) {
-      // if j == 0, the path is traversed "forwards" (i.e. in the direction listed in the input)
-      // if j == 1, the path is traversed "reversed" (i.e. the opposite direction to the input)
-      for (let j = 0; j < 2; j++) {
-        const d = dist2Between(firstIdx, i * 2 + j);
-        if (d < minD) {
-          minD = d;
-          nextIdx = i * 2 + j;
-        }
-      }
-    }
+  const tree = new PointRBush
+  tree.load([...range(2, pointLists.length * 2)])
 
-    unvisited.delete((nextIdx / 2) | 0);
+  const sortedPointLists: Vec2[][] = [];
+  sortedPointLists.push(pointLists[0]);
+  let cur = pt(1)
+  let n = pointLists.length * 2 - 2
+  while (n) {
+    const [nn] = knn(tree, cur.x, cur.y, 1)
+    const plId = (nn/2)|0
+    tree.remove(plId * 2)
+    tree.remove(plId * 2 + 1)
     sortedPointLists.push(
-      nextIdx % 2 === 0
-        ? pointLists[(nextIdx / 2) | 0]
-        : pointLists[(nextIdx / 2) | 0].slice().reverse()
-    );
-    firstIdx = nextIdx;
+      nn % 2 === 0
+        ? pointLists[plId]
+        : pointLists[plId].slice().reverse()
+    )
+    cur = pt(nn)
+    n -= 2
   }
   return sortedPointLists;
 }
