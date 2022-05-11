@@ -106,7 +106,10 @@ export function reorder(pointLists: Vec2[][]): Vec2[][] {
         ? pointLists[plId]
         : pointLists[plId].slice().reverse()
     )
-    cur = pt(nn)
+    
+    // if nn points to the beginning of a path, next search is from end of the path
+    // if nn points to the end of a path, next search is from beginning of the path
+    cur = pt(nn % 2 === 0 ? nn + 1 : nn - 1)
     n -= 2
   }
   return sortedPointLists;
