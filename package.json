@@ -1,6 +1,6 @@
 {
-  "name": "optimize-paths",
-  "version": "1.2.1",
+  "name": "@makio135/optimize-paths",
+  "version": "1.2.2",
   "description": "Optimize linear paths for plotting",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
